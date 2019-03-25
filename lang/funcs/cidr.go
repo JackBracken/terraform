@@ -1,8 +1,10 @@
 package funcs
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/zclconf/go-cty/cty"
@@ -113,6 +115,43 @@ var CidrSubnetFunc = function.New(&function.Spec{
 	},
 })
 
+// RDnsHostFunc contructs a function that reverses the octets or nibbles of
+// single a given IPv4 or IPv6 address.
+var RDnsHostFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{
+			Name: "address",
+			Type: cty.String,
+		},
+	},
+	Type: function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (ret cty.Value, err error) {
+		// do thing
+
+		ip := net.ParseIP(args[0].AsString())
+		if ip == nil {
+			return cty.UnknownVal(cty.String), fmt.Errorf("invalid IPv4 or IPv6 address: %s", err)
+		}
+
+		if ip4 := ip.To4(); ip4 != nil {
+			for i := len(ip4)/2 - 1; i >= 0; i-- {
+				opp := len(ip4) - 1 - i
+				ip4[i], ip4[opp] = ip4[opp], ip4[i]
+			}
+			return cty.StringVal(fmt.Sprintf("%s.in-addr.arpa.", ip4.String())), nil
+		}
+
+		nibs := hex.EncodeToString(ip.To16())
+
+		rev := make([]string, len(nibs))
+		for i, c := range nibs {
+			rev[len(nibs)-i-1] = string(c)
+		}
+
+		return cty.StringVal(fmt.Sprintf("%s.ip6.arpa.", strings.Join(rev, "."))), nil
+	},
+})
+
 // CidrHost calculates a full host IP address within a given IP network address prefix.
 func CidrHost(prefix, hostnum cty.Value) (cty.Value, error) {
 	return CidrHostFunc.Call([]cty.Value{prefix, hostnum})
@@ -126,4 +165,9 @@ func CidrNetmask(prefix cty.Value) (cty.Value, error) {
 // CidrSubnet calculates a subnet address within a given IP network address prefix.
 func CidrSubnet(prefix, newbits, netnum cty.Value) (cty.Value, error) {
 	return CidrSubnetFunc.Call([]cty.Value{prefix, newbits, netnum})
+}
+
+// RDnsHost reverses the octets of an IPv4 address or network.
+func RDnsHost(prefix cty.Value) (cty.Value, error) {
+	return RDnsHostFunc.Call([]cty.Value{prefix})
 }

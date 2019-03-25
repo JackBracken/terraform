@@ -214,3 +214,56 @@ func TestCidrSubnet(t *testing.T) {
 		})
 	}
 }
+
+func TestRDnsReverse(t *testing.T) {
+	tests := []struct {
+		Address cty.Value
+		Want    cty.Value
+		Err     bool
+	}{
+		{
+			cty.StringVal("192.168.1.1"),
+			cty.StringVal("1.1.168.192.in-addr.arpa."),
+			false,
+		},
+		{
+			cty.StringVal("2001:db8::1"),
+			cty.StringVal("1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa."),
+			false,
+		},
+		{
+			cty.StringVal("3731:54:65fe:2::a7"),
+			cty.StringVal("7.a.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.e.f.5.6.4.5.0.0.1.3.7.3.ip6.arpa."),
+			false,
+		},
+		{
+			cty.StringVal("not-an-address"),
+			cty.UnknownVal(cty.String),
+			true, // not a valid IPv4 or IPv6 address
+		},
+		{
+			cty.StringVal("110.256.0.1"),
+			cty.UnknownVal(cty.String),
+			true, // can't have an octet >255
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("rdnshost(%#v)", test.Address), func(t *testing.T) {
+			got, err := RDnsHost(test.Address)
+
+			if test.Err {
+				if err == nil {
+					t.Fatal("succeeded; want error")
+				}
+				return
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if !got.RawEquals(test.Want) {
+				t.Errorf("wrong result\ngot:  %#v\nwant: %#v", got, test.Want)
+			}
+		})
+	}
+}
